@@ -9,6 +9,9 @@ def get_gzip_base64_encoded(file_path):
     handler = open(file_path, mode='rb').read()
     return base64.encodestring(zlib.compress(handler))
 
+def get_gzip_base64_decoded(data):
+    return zlib.decompress(base64.b64decode(data)[10:], -15)
+
 
 def get_md5(file_path):
     '''Return the md5 of a file.

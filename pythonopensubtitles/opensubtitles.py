@@ -5,6 +5,15 @@ except ImportError:     #Python 3
     from xmlrpc.client import ServerProxy
     from .settings import Settings
 
+from utils import get_gzip_base64_decoded
+
+class Language:
+    EN = 'eng'
+    RU = 'rus'
+
+class DownloadLimitReachedError(Exception): pass
+class NoSessionError(Exception): pass
+class UnauthorizedError(Exception): pass
 
 class OpenSubtitles(object):
     '''OpenSubtitles API wrapper.
@@ -13,24 +22,27 @@ class OpenSubtitles(object):
     http://trac.opensubtitles.org/projects/opensubtitles/wiki/XMLRPC
     '''
 
-    def __init__(self, language=None):
-        self.xmlrpc = ServerProxy(Settings.OPENSUBTITLES_SERVER,
-                                  allow_none=True)
-        self.language = language or Settings.LANGUAGE
+    def __init__(self, user_agent=Settings.TEST_USER_AGENT, language=Settings.LANGUAGE):
+        self.xmlrpc = ServerProxy(Settings.OPENSUBTITLES_SERVER, allow_none=True)
+        self.language = language
+        self.user_agent = user_agent
         self.token = None
 
     def _get_from_data_or_none(self, key):
         '''Return the key getted from data if the status is 200,
         otherwise return None.
         '''
-        status = self.data.get('status').split()[0]
-        return self.data.get(key) if '200' == status else None
+        status = int(self.data.get('status').split()[0])
+        if status == 200: return self.data.get(key)
+        elif status == 401: raise UnauthorizedError
+        elif status == 406: raise NoSessionError
+        elif status == 407: raise DownloadLimitReachedError
+        else: raise RuntimeError('Request failed: status: %s' % self.data.get('status'))
 
     def login(self, username, password):
         '''Returns token is login is ok, otherwise None.
         '''
-        self.data = self.xmlrpc.LogIn(username, password,
-                                 self.language, Settings.USER_AGENT)
+        self.data = self.xmlrpc.LogIn(username, password, self.language, self.user_agent)
         token = self._get_from_data_or_none('token')
         if token:
             self.token = token
@@ -39,13 +51,16 @@ class OpenSubtitles(object):
     def logout(self):
         '''Returns True is logout is ok, otherwise None.
         '''
-        data = self.xmlrpc.LogOut(self.token)
-        return '200' in data.get('status')
+        self.data = self.xmlrpc.LogOut(self.token)
+        return '200' in self.data.get('status')
 
-    def search_subtitles(self, params):
+    def search_subtitles(self, imdbid, langs=[Language.EN], params=None):
         '''Returns a list with the subtitles info.
         '''
-        self.data = self.xmlrpc.SearchSubtitles(self.token, params)
+        all_params = {'imdbid' : imdbid, 'sublanguageid' : ','.join(langs)}
+        if params != None: all_params.update(params)
+
+        self.data = self.xmlrpc.SearchSubtitles(self.token, [all_params])
         return self._get_from_data_or_none('data')
 
     def try_upload_subtitles(self, params):
@@ -67,14 +82,14 @@ class OpenSubtitles(object):
         .. note:: this method should be called 15 minutes after last request to
                   the xmlrpc server.
         '''
-        data = self.xmlrpc.NoOperation(self.token)
-        return '200' in data.get('status')
+        self.data = self.xmlrpc.NoOperation(self.token)
+        return '200' in self.data.get('status')
 
     def auto_update(self, program):
         '''Returns info of the program: last_version, url, comments...
         '''
-        data = self.xmlrpc.AutoUpdate(program)
-        return data if '200' in data.get('status') else None
+        self.data = self.xmlrpc.AutoUpdate(program)
+        return self.data if '200' in self.data.get('status') else None
 
     def search_movies_on_imdb(self, params):
         self.data = self.xmlrpc.SearchMoviesOnIMDB(self.token, params)
@@ -104,10 +119,16 @@ class OpenSubtitles(object):
         # array DetectLanguage( $token, array($text, $text, ...) )
         raise NotImplementedError
 
-    def download_subtitles(self):
-        # array DownloadSubtitles( $token, array($IDSubtitleFile, $IDSubtitleFile,...) )
-        raise NotImplementedError
-
+    def download_subtitles(self, subfileids):
+        if isinstance(subfileids, str): subfileids = [subfileids]
+        assert isinstance(subfileids, list)
+        if len(subfileids) > 20: raise ValueError('Maximum number of subids is 20, given %d' % len(subfileids))
+        self.data = self.xmlrpc.DownloadSubtitles(self.token, subfileids)
+        subs = []
+        for sub in self._get_from_data_or_none('data'):
+            subs.append(get_gzip_base64_decoded(sub['data']))
+        return subs
+        
     def report_wrong_movie_hash(self):
         # array ReportWrongMovieHash( $token, $IDSubMovieFile )
         raise NotImplementedError

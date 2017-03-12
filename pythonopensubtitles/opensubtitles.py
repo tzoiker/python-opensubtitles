@@ -124,7 +124,7 @@ class OpenSubtitles(object):
         raise NotImplementedError
 
     def download_subtitles(self, subfileids):
-        if isinstance(subfileids, str): subfileids = [subfileids]
+        if isinstance(subfileids, basestring): subfileids = [subfileids]
         assert isinstance(subfileids, list)
         if len(subfileids) > 20: raise ValueError('Maximum number of subids is 20, given %d' % len(subfileids))
         self.data = self.xmlrpc.DownloadSubtitles(self.token, subfileids)

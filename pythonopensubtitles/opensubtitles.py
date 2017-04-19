@@ -16,6 +16,7 @@ class NoSessionError(Exception): pass
 class UnauthorizedError(Exception): pass
 class ServerMaintenanceError(Exception): pass
 class ServiceUnavailableError(Exception): pass
+class TooManyRequestsError(Exception): pass
 
 class OpenSubtitles(object):
     '''OpenSubtitles API wrapper.
@@ -39,6 +40,7 @@ class OpenSubtitles(object):
         elif status == 401: raise UnauthorizedError
         elif status == 406: raise NoSessionError
         elif status == 407: raise DownloadLimitReachedError
+	elif status == 429: raise TooManyRequestsError
 	elif status == 503: raise ServiceUnavailableError
 	elif status == 506: raise ServerMaintenanceError
         else: raise RuntimeError('Request failed: status: %s' % self.data.get('status'))

@@ -1,11 +1,13 @@
 try:                    #Python 2
 	from xmlrpclib import ServerProxy
 	from settings import Settings
+	from utils import get_gzip_base64_decoded
 except ImportError:     #Python 3
 	from xmlrpc.client import ServerProxy
 	from .settings import Settings
+	from .utils import get_gzip_base64_decoded
 
-from utils import get_gzip_base64_decoded
+
 
 class Language:
 	EN = 'eng'
